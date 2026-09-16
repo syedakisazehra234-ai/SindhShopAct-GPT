@@ -1,427 +1,198 @@
-# Sindh Shops & Commercial Establishment Act — RAG Assistant
+Sindh Shops & Commercial Establishment Act — RAG Assistant
 
-A source-grounded Retrieval-Augmented Generation (RAG) application built with:
+A Streamlit RAG application for question answering over the supplied Sindh Shops and Commercial Establishment Act, 2015 (Sindh Act No. XII of 2016) PDF.
 
-- Python
-- Streamlit
-- FAISS
-- Sentence Transformers
-- PyMuPDF
-- Groq `openai/gpt-oss-20b`
+Tech stack
 
-The application downloads the supplied Sindh Shops and Commercial Establishment Act PDF from the configured Google Drive direct-download URL when the RAG resources are first initialized, extracts the PDF text, creates embeddings, builds a FAISS vector index, retrieves the most relevant passages, and sends only those passages to Groq for the final answer.
+Python
 
-## Important source scope
+Streamlit
 
-The application is intentionally designed around the supplied PDF:
+FAISS
 
-**The Sindh Shops and Commercial Establishment Act, 2015 (Sindh Act No. XII of 2016)** and the amendment material contained in the supplied document.
+Sentence Transformers (all-MiniLM-L6-v2)
 
-The app does not silently replace the supplied document with another online copy. If the retrieved source does not contain enough information, the default **Strict source mode** instructs the assistant to say so rather than inventing an answer.
-
-This is a legal-information/RAG demonstration, not legal advice.
-
-## Files
-
-Only these three files are required:
-
-```text
-app.py
-requirements.txt
-readme.md
-```
-
-No local PDF needs to be committed to GitHub because `app.py` downloads the supplied PDF URL at startup.
-
-## Features
-
-### RAG pipeline
-
-```text
-Supplied PDF
-    ↓
-Google Drive download
-    ↓
 PyMuPDF
-    ↓
-Text cleaning
-    ↓
-Overlapping chunks
-    ↓
-Sentence Transformers
-    ↓
-Normalized embeddings
-    ↓
-FAISS IndexFlatIP
-    ↓
-Top-K retrieval
-    ↓
-Groq GPT-OSS 20B
-    ↓
-Source-grounded answer
-```
 
-### UI controls
+Groq (openai/gpt-oss-20b)
 
-The sidebar provides:
+Google Drive + gdown for automatic source-PDF download
 
-- **Technicality**
-  - Simple
-  - Standard
-  - Technical
-  - Legal/Expert
+Source PDF and download behavior
 
-- **Response size**
-  - Short
-  - Medium
-  - Long
-  - Very long
+The app uses the official Sindh Laws PDF as its primary source URL:
 
-- **Answer language**
-  - English
-  - Urdu
-  - Roman Urdu
+https://www.sindhlaws.gov.pk/setup/publications_SindhCode/PUB-NEW-18-000109.pdf
 
-- **Retrieved passages**
-  - Controls FAISS Top-K
+This is the published Sindh Act No. XII of 2016 — The Sindh Shops and Commercial Establishment Act, 2015. The user's Google Drive file ID is also configured as a fallback.
 
-- **Creativity / strictness**
-  - Temperature control
-  - A low value is recommended for statutory questions
+The Google Drive share link you supplied is:
 
-- **Reasoning effort**
-  - low
-  - medium
-  - high
+https://drive.google.com/file/d/1O_CjQSmShfJovVV9sU6NQ_mqZPFll17Q/view?usp=drive_link
 
-- **Show retrieved source passages**
-  - Displays the actual passages used for the answer
+If you want the app to use the Drive copy instead of the official Sindh Laws copy, make the Drive file public:
 
-- **Strict source mode**
-  - Forces the model to stay inside the supplied document
+Open the PDF in Google Drive.
 
-## Groq API key
+Click Share.
 
-Do **not** put your Groq API key inside `app.py`.
+Under General access, select Anyone with the link.
 
-### Streamlit Cloud
-
-After creating the Streamlit app:
-
-1. Open your Streamlit app.
-2. Open **Settings**.
-3. Open **Secrets**.
-4. Add:
-
-```toml
-GROQ_API_KEY = "your_groq_api_key_here"
-```
-
-Save the secret and restart/reboot the app if necessary.
-
-### Colab / local testing
-
-You can set an environment variable:
-
-```python
-import os
-os.environ["GROQ_API_KEY"] = "your_groq_api_key_here"
-```
-
-The application also contains an optional password field in the sidebar so you can paste a key during a temporary test without editing the source code.
-
-Never commit a real API key to GitHub.
-
-## GitHub → Streamlit Cloud deployment
-
-### Step 1 — Create a GitHub repository
-
-Create a new GitHub repository, for example:
-
-```text
-sindh-shops-act-rag
-```
-
-You only need to upload:
-
-```text
-app.py
-requirements.txt
-readme.md
-```
-
-Do not upload:
-
-- `.env`
-- your Groq API key
-- large generated FAISS files
-- the PDF
-- Python virtual environments
-
-### Step 2 — Upload the three files
-
-On GitHub:
-
-1. Open the repository.
-2. Click **Add file** → **Create new file**.
-3. Create `app.py` and paste the application code.
-4. Create `requirements.txt` and paste the dependency list.
-5. Create `readme.md` and paste this README.
-6. Commit the changes.
-
-### Step 3 — Create the Streamlit app
-
-Open Streamlit Community Cloud and sign in with GitHub.
-
-Create a new app and select:
-
-```text
-Repository: your GitHub repository
-Branch: main
-Main file: app.py
-```
-
-Deploy.
-
-### Step 4 — Add the Groq secret
-
-In Streamlit Cloud:
-
-```text
-App
-→ Settings
-→ Secrets
-```
-
-Add:
-
-```toml
-GROQ_API_KEY = "your_groq_api_key_here"
-```
+Set the role to Viewer.
 
 Save.
 
-The app will then download the PDF and build the RAG index.
+This matters because Streamlit Cloud does not have your personal Google login session. gdown can handle Google Drive share links and confirmation pages, but the file must be accessible to the unauthenticated application.
 
-## Colab testing
+Why the old version failed
 
-The application can also be run from Google Colab.
+The /file/d/.../view Google Drive URL is a preview/share page, not guaranteed raw PDF bytes. Google can return HTML instead of the PDF. The old application checked the first bytes for %PDF and therefore raised the error.
 
-Install the requirements:
+The fixed application now:
 
-```python
-!pip install -r requirements.txt
-```
+Tries the official Sindh Laws PDF first.
 
-Set the Groq key:
+Tries the supplied Google Drive share URL.
 
-```python
-import os
-os.environ["GROQ_API_KEY"] = "your_groq_api_key_here"
-```
+Tries Google Drive direct-download endpoints.
 
-Then run Streamlit using your preferred Colab Streamlit/tunneling setup.
+Falls back to gdown, which is designed to handle Google Drive confirmation/interstitial pages.
 
-The RAG application itself does not require a paid vector database or paid embedding service.
+Validates the downloaded content with the PDF %PDF signature before PyMuPDF/FAISS indexing.
 
-## Why FAISS + Sentence Transformers?
+This means an HTML Drive permission page will never be passed to the embedding pipeline.
 
-This project uses local embeddings instead of an external embedding API.
+Files
 
-`all-MiniLM-L6-v2` creates the document and query embeddings locally.
+Keep exactly these three files in the GitHub repository:
 
-FAISS then performs vector similarity search locally.
+app.py
+requirements.txt
+readme.md
 
-This keeps the RAG retrieval layer inexpensive and simple enough for a beginner-friendly Streamlit deployment.
+Do not commit the PDF or your Groq API key.
 
-## Why the application uses source passages
+Groq API key
 
-A legal RAG system should not simply ask an LLM:
-
-> "What does the Sindh Shops Act say?"
-
-Instead, the application:
-
-1. Converts the statute into searchable chunks.
-2. Embeds those chunks.
-3. Finds passages semantically related to the question.
-4. Supplies those passages to the LLM.
-5. Instructs the LLM to answer from those passages.
-6. Shows the retrieved passages so the user can inspect the evidence.
-
-This reduces unsupported answers, although no RAG system can guarantee perfect legal interpretation.
-
-## Example questions
-
-Try:
-
-```text
-What is the maximum closing time for an establishment?
-```
-
-```text
-How many hours can an adult employee work per day?
-```
-
-```text
-What is the overtime rate?
-```
-
-```text
-How many days of annual leave are provided?
-```
-
-```text
-What are the casual and sick leave entitlements?
-```
-
-```text
-Can a child be employed in an establishment?
-```
-
-```text
-What notice is required to terminate a permanent employee?
-```
-
-```text
-When must an establishment be registered?
-```
-
-```text
-What registration fees are stated in section 24?
-```
-
-```text
-What is the weekly holiday rule?
-```
-
-```text
-What are the penalties for violating section 7?
-```
-
-```text
-What powers does an Inspector have?
-```
-
-## Accuracy design
-
-The application uses several controls specifically for statutory Q&A:
-
-### Low default temperature
-
-The default temperature is `0.1` because legal/statutory questions generally benefit from consistent, source-focused responses rather than creative generation.
-
-### Source citations
-
-Retrieved passages contain:
-
-```text
-Section number
-PDF page
-similarity score
-```
-
-The model is instructed to reference relevant sections and PDF pages.
-
-### Strict source mode
-
-Strict mode tells the model not to manufacture:
-
-- fees
-- deadlines
-- exceptions
-- penalties
-- eligibility rules
-- amendment effects
-- procedures
-
-when those details are not supported by the retrieved source.
-
-### User-visible retrieval
-
-The application can show the exact retrieved passages, making it easier to inspect what the model received.
-
-## Notes about startup time
-
-The first startup can take longer because the application may need to:
-
-1. Download the PDF.
-2. Load the Sentence Transformer model.
-3. Extract the PDF.
-4. Generate embeddings.
-5. Build the FAISS index.
-
-Streamlit caching is used so the expensive PDF/embedding/index work is reused during the app's active process instead of being repeated on every question.
-
-If the Streamlit app is restarted or its cache is cleared, the initialization process runs again.
-
-## Free-tier considerations
-
-The application itself uses open-source Python libraries for PDF processing, embeddings, and FAISS retrieval.
-
-Groq API usage is subject to the limits and availability of the Groq account/model you use. Streamlit Community Cloud also has its own resource limits.
-
-The code does not require:
-
-- OpenAI API
-- Pinecone
-- Weaviate
-- Chroma Cloud
-- a paid database
-- a paid embedding API
-
-## Troubleshooting
-
-### `ModuleNotFoundError: No module named 'faiss'`
-
-Make sure `requirements.txt` contains:
-
-```text
-faiss-cpu>=1.10.0
-```
-
-Then redeploy/reboot the Streamlit app.
-
-### PDF download error
-
-The application validates that the URL actually returns a PDF.
-
-If the Google Drive URL stops working, replace `PDF_URL` in `app.py` with a valid direct-download URL for the same source document.
-
-### Groq API key missing
-
-Check:
-
-```text
 Streamlit Cloud
-→ Settings
-→ Secrets
-```
 
-and ensure:
+After deploying:
 
-```toml
-GROQ_API_KEY = "..."
-```
+App → Settings → Secrets
 
-is present.
+Add:
 
-### Model error
+GROQ_API_KEY = "your_groq_api_key_here"
 
-The application currently uses:
+Save and reboot the app.
 
-```text
-openai/gpt-oss-20b
-```
+Local/Colab
 
-If Groq changes model availability in the future, update `MODEL_NAME` in `app.py` to an available Groq chat model.
+You can either set GROQ_API_KEY as an environment variable or paste the key into the optional field in the sidebar.
 
-## Legal/source limitation
+Deploy through GitHub → Streamlit Community Cloud
 
-This application is a retrieval and explanation layer over the supplied PDF. It should not be treated as an official legal interpretation.
+Create a GitHub repository.
 
-For an important employment or compliance decision, verify the applicable law, notifications, rules, amendments, official gazette material, and professional legal advice as appropriate.
+Upload only app.py, requirements.txt, and readme.md.
 
-## License
+Open Streamlit Community Cloud.
 
-For educational/project use. Add an appropriate open-source license if you intend to publish the repository for reuse.
+Create a new app.
+
+Select your GitHub repository.
+
+Select the branch containing the files.
+
+Set the main file to app.py.
+
+Deploy.
+
+Open Settings → Secrets and add GROQ_API_KEY.
+
+Reboot/redeploy the application.
+
+On the first startup, the app downloads the Google Drive PDF, extracts its text, creates Sentence Transformer embeddings, and builds the FAISS index. Streamlit caching prevents rebuilding the index on every normal rerun.
+
+Features
+
+The sidebar provides controls for:
+
+Technicality: Simple / Standard / Technical / Legal/Expert
+
+Response size: Short / Medium / Long / Very long
+
+Answer language: English / Urdu / Roman Urdu
+
+Number of retrieved passages
+
+Temperature
+
+Groq reasoning effort
+
+Strict source mode
+
+Display retrieved source passages
+
+Source-grounded behavior
+
+The assistant is instructed to answer from the supplied document and to identify when the retrieved source does not contain enough information. It also displays the retrieved passages so the user can inspect the basis of an answer.
+
+The supplied document identifies itself as the Sindh Shops and Commercial Establishment Act, 2015, Sindh Act No. XII of 2016, and describes its purpose as amending and consolidating law concerning hours and other conditions of work and employment in establishments in Sindh.
+
+Common questions to test
+
+What is the maximum closing time for an establishment?
+
+How many hours can an adult employee work per day and per week?
+
+What is the overtime rate?
+
+What is the weekly holiday rule?
+
+How much annual leave is provided?
+
+How much casual and sick leave is provided?
+
+Can a child be employed?
+
+What is the notice period for a permanent employee?
+
+When must an establishment be registered?
+
+What registration fees are stated in section 24?
+
+What powers does an Inspector have?
+
+What penalties are provided for violations?
+
+Which establishments are excluded from the Act?
+
+What is a commercial establishment?
+
+Troubleshooting
+
+Error: The source document could not be downloaded or indexed
+
+Check the following:
+
+The Google Drive file is set to Anyone with the link → Viewer.
+
+The Drive file still has the same file ID:
+1O_CjQSmShfJovVV9sU6NQ_mqZPFll17Q
+
+gdown appears in requirements.txt.
+
+Reboot/redeploy the Streamlit app after changing the repository.
+
+Error: ModuleNotFoundError: faiss
+
+Make sure faiss-cpu is present in requirements.txt, then reboot the Streamlit app so dependencies are reinstalled.
+
+Error: Groq API key missing
+
+Add GROQ_API_KEY under Streamlit Cloud Settings → Secrets, or enter the key in the sidebar.
+
+Error: Groq rate limit
+
+Groq API limits can be reached on free/low-volume accounts. Wait and retry, reduce response size, or lower the requested reasoning/output level.
