@@ -7,6 +7,8 @@ import faiss
 import fitz
 import numpy as np
 import requests
+import tempfile
+import gdown
 import streamlit as st
 from groq import Groq
 from sentence_transformers import SentenceTransformer
@@ -18,12 +20,12 @@ from sentence_transformers import SentenceTransformer
 
 APP_TITLE = "Sindh Shops & Commercial Establishment Act — RAG Assistant"
 
-# The user-provided Google Drive direct-download URL.
-PDF_URL = (
-    "https://drive.usercontent.google.com/download"
-    "?id=1O_CjQSmShfJovVV9sU6NQ_mqZPFll17Q"
-    "&export=download&authuser=0"
-)
+# Source URLs. The official Sindh Laws PDF is used first because it is a
+# stable public PDF endpoint. The user's Google Drive share link remains as
+# a fallback when it is publicly accessible.
+PDF_URL = "https://www.sindhlaws.gov.pk/setup/publications_SindhCode/PUB-NEW-18-000109.pdf"
+DRIVE_SHARE_URL = "https://drive.google.com/file/d/1O_CjQSmShfJovVV9sU6NQ_mqZPFll17Q/view?usp=drive_link"
+DRIVE_FILE_ID = "1O_CjQSmShfJovVV9sU6NQ_mqZPFll17Q"
 
 MODEL_NAME = "openai/gpt-oss-20b"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
@@ -137,24 +139,93 @@ with st.sidebar:
 
 @st.cache_data(show_spinner=False)
 def download_pdf() -> bytes:
-    """Download the source PDF from the supplied direct-download URL."""
+    """Download and validate the Act PDF.
+
+    Priority:
+    1) Official Sindh Laws PDF (public/stable).
+    2) User's Google Drive share URL via gdown.
+    3) Google Drive direct-download endpoints.
+
+    Every candidate is validated using the PDF magic header, so an HTML
+    Google Drive preview/permission page can never enter the RAG pipeline.
+    """
+    candidates = [
+        ("Official Sindh Laws", PDF_URL),
+        ("Google Drive share link", DRIVE_SHARE_URL),
+        ("Google Drive direct download",
+         f"https://drive.google.com/uc?export=download&id={DRIVE_FILE_ID}"),
+        ("Google Drive usercontent",
+         f"https://drive.usercontent.google.com/download?id={DRIVE_FILE_ID}&export=download&confirm=t"),
+    ]
+
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; Sindh-Act-RAG/1.0)"
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/pdf,*/*;q=0.8",
     }
-    response = requests.get(PDF_URL, headers=headers, timeout=90)
-    response.raise_for_status()
 
-    content_type = response.headers.get("content-type", "").lower()
-    data = response.content
+    errors = []
 
-    # Basic validation so an HTML error page is not silently indexed as a PDF.
-    if not data.startswith(b"%PDF"):
-        raise ValueError(
-            "The supplied URL did not return a PDF file. "
-            "Please check the Google Drive download link."
+    # Normal HTTP candidates.
+    for label, url in candidates:
+        try:
+            response = requests.get(
+                url, headers=headers, timeout=120, allow_redirects=True
+            )
+            response.raise_for_status()
+            data = response.content
+            content_type = response.headers.get("content-type", "").lower()
+
+            if data.startswith(b"%PDF"):
+                return data
+
+            errors.append(
+                f"{label}: received {content_type or 'unknown content type'}, "
+                f"{len(data):,} bytes, not a PDF"
+            )
+        except requests.RequestException as exc:
+            errors.append(f"{label}: {exc}")
+
+    # gdown understands Google Drive's share-link format and its
+    # confirmation/interstitial pages. This requires the Drive file to be
+    # shared as 'Anyone with the link' for an unauthenticated cloud app.
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        downloaded = gdown.download(
+            url=DRIVE_SHARE_URL,
+            output=tmp_path,
+            quiet=True,
+            fuzzy=True,
         )
 
-    return data
+        if downloaded and os.path.exists(downloaded):
+            with open(downloaded, "rb") as f:
+                data = f.read()
+            if data.startswith(b"%PDF"):
+                return data
+            errors.append("gdown: downloaded content was not a PDF")
+    except Exception as exc:
+        errors.append(f"gdown: {exc}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+    raise ValueError(
+        "The source document could not be downloaded as a PDF. "
+        "The app tried the official Sindh Laws copy and the supplied Google "
+        "Drive link. If the Drive file is private, set Google Drive → Share → "
+        "General access → Anyone with the link → Viewer. Download diagnostics: "
+        + " | ".join(errors)
+    )
 
 
 def clean_text(text: str) -> str:
@@ -527,3 +598,4 @@ st.caption(
     "RAG pipeline: Google Drive PDF → PyMuPDF text extraction → overlapping chunks → "
     "Sentence Transformers embeddings → FAISS similarity search → Groq GPT-OSS 20B."
 )
+
